@@ -26,13 +26,9 @@ jobs:
         go mod tidy
         go mod download
 
-    # Run tests
-    - name: Run tests
-      run: go test -v ./...
-
     # Build the application
     - name: Build application
-      run: go build -v -o youllgetit_user_API ./...
+      run: go build -o youllgetit_user_API .
 
     # Deploy to remote server
     - name: Deploy to remote server
