@@ -59,7 +59,7 @@ jobs:
         '
         
         # Transfer binary
-        scp -v -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
+        scp -vvv -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
             youllgetit_user_API \
             $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
         
