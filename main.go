@@ -16,6 +16,8 @@ func main() {
 
 	api.RegisterPublicRoute(router)
 	api.RegisterCreateUserRoute(router)
+	api.RegisterSyncPushRoutes(router)
+	api.RegisterSyncPullRoute(router)
 
 	log.Print("Server listening on http://localhost:3010")
 	if err := http.ListenAndServe("0.0.0.0:3010", router); err != nil {

@@ -40,7 +40,6 @@ func RegisterCreateUserRoute(router *http.ServeMux) {
 			}
 
 			db, dbConnectionErr := queries.GetDBConnection("auth_action")
-
 			if dbConnectionErr != nil {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte(`{"message":"Connection to database failed."}`))
