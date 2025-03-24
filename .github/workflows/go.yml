@@ -37,29 +37,36 @@ jobs:
         SERVER_HOST: ${{ secrets.SERVER_HOST }}
         SERVER_USER: ${{ secrets.SERVER_USER }}
       run: |
-        # Prepare SSH
+        # Debugging: Print connection info
+        echo "Connecting to $SERVER_USER@$SERVER_HOST"
+        
+        # Prepare SSH directory with strict permissions
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Write SSH key with precise permissions
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
+        
+        # Add known hosts
         ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
-    
+        chmod 644 ~/.ssh/known_hosts
+        
         # Stop current application
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
-          $SERVER_USER@$SERVER_HOST '
-            pkill -f youllgetit_user_API || true
-            sleep 2
-          '
-    
-        # Transfer new binary
-        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
-          youllgetit_user_API \
-          $SERVER_USER@$SERVER_HOST:~/apps/youllgetit_user_API
-    
-        # Start new application
-        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
-          cd ~/apps
-          chmod +x youllgetit_user_API
-          nohup ./youllgetit_user_API > youllgetit_user_API.log 2>&1 &
+        ssh -vvv -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+          pkill -f youllgetit_user_API || true
+          sleep 2
+        '
+        
+        # Transfer binary
+        scp -v -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
+            youllgetit_user_API \
+            $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
+        
+        # Deploy on remote server
+        ssh -v -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+          chmod +x ~/youllgetit_user_API
+          nohup ~/youllgetit_user_API > ~/youllgetit_user_API.log 2>&1 &
           sleep 2
           ps aux | grep youllgetit_user_API
         '
