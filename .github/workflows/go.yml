@@ -31,42 +31,94 @@ jobs:
       run: go build -o youllgetit_user_API .
 
     # Deploy to remote server
-    - name: Deploy to remote server
+    - name: Prepare SSH Environment
       env:
         SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
         SERVER_HOST: ${{ secrets.SERVER_HOST }}
         SERVER_USER: ${{ secrets.SERVER_USER }}
       run: |
-        # Debugging: Print connection info
-        echo "Connecting to $SERVER_USER@$SERVER_HOST"
-        
-        # Prepare SSH directory with strict permissions
+        # Create SSH directory with secure permissions
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
-        
-        # Write SSH key with precise permissions
+    
+        # Securely write SSH private key
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        
-        # Add known hosts
+    
+        # Add server to known hosts
         ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
         chmod 644 ~/.ssh/known_hosts
-        
-        # Stop current application
-        ssh -vvv -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+    
+    - name: Stop Existing Application
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Verbose SSH to stop any running instances
+        ssh -vvv -i ~/.ssh/id_rsa \
+            -o StrictHostKeyChecking=no \
+            $SERVER_USER@$SERVER_HOST '
+          # Forcefully kill any existing process
           pkill -f youllgetit_user_API || true
+          
+          # Wait for process termination
           sleep 2
+          
+          # Verify process is stopped
+          pgrep -f youllgetit_user_API || echo "No existing process found"
         '
-        
-        # Transfer binary
-        scp -vvv -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
+    
+    - name: Transfer Application Binary
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Secure copy of binary with verbose output
+        scp -vvv \
+            -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_rsa \
             youllgetit_user_API \
             $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
-        
-        # Deploy on remote server
-        ssh -v -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+    
+    - name: Start Application
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Remote commands to start application
+        ssh -v -o StrictHostKeyChecking=no \
+            $SERVER_USER@$SERVER_HOST '
+          # Ensure binary is executable
           chmod +x ~/youllgetit_user_API
+          
+          # Start application in background with logging
           nohup ~/youllgetit_user_API > ~/youllgetit_user_API.log 2>&1 &
+          
+          # Short pause to allow startup
           sleep 2
+          
+          # Verify application is running
           ps aux | grep youllgetit_user_API
+          
+          # Optional: Tail recent log entries
+          tail -n 10 ~/youllgetit_user_API.log
+        '
+    
+    - name: Verify Deployment
+      env:
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Additional verification step
+        ssh -v -o StrictHostKeyChecking=no \
+            $SERVER_USER@$SERVER_HOST '
+          # Check application status
+          if pgrep -f youllgetit_user_API > /dev/null; then
+            echo "Application is running successfully"
+            exit 0
+          else
+            echo "ERROR: Application failed to start"
+            cat ~/youllgetit_user_API.log
+            exit 1
+          fi
         '
