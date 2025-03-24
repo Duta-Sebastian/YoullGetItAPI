@@ -28,7 +28,7 @@ jobs:
 
     # Build the application
     - name: Build application
-      run: go build -o youllgetit_user_API .
+      run: go build -o youllgetit_user_api .
 
     # Deploy to remote server
     - name: Deploy to remote server
@@ -37,29 +37,34 @@ jobs:
         SERVER_HOST: ${{ secrets.SERVER_HOST }}
         SERVER_USER: ${{ secrets.SERVER_USER }}
       run: |
-        # Prepare SSH
+        # Debugging: Print some connection info
+        echo "Connecting to $SERVER_USER@$SERVER_HOST"
+        
+        # Prepare SSH directory with strict permissions
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Write SSH key with precise permissions
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
+        
+        # Add known hosts
         ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
-
-        # Transfer binary
-        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
-          youllgetit_user_API \
-          $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
-
+        chmod 644 ~/.ssh/known_hosts
+        
+        # Verbose SSH test
+        ssh -vvv -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'hostname'
+        
+        # If SSH test succeeds, proceed with deployment
+        scp -v -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
+            youllgetit_user_API \
+            $SERVER_USER@$SERVER_HOST:~/youllgetit_user_api
+        
         # Deploy on remote server
-        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
-          # Ensure the binary is executable
-          chmod +x ~/youllgetit_user_API
-          
-          # Stop existing process if running
-          pkill -f youllgetit_user_API || true
-          
-          # Start the application in background
-          nohup ~/youllgetit_user_API > ~/youllgetit_user_API.log 2>&1 &
-          
-          # Verify process is running
+        ssh -v -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+          chmod +x ~/youllgetit_user_api
+          pkill -f youllgetit_user_api || true
+          nohup ~/youllgetit_user_api > ~/youllgetit_user_api.log 2>&1 &
           sleep 2
-          ps aux | grep youllgetit_user_API
+          ps aux | grep youllgetit_user_api
         '
