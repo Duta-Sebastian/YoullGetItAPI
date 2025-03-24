@@ -1,0 +1,69 @@
+name: You'll Get It User API deployment
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    # Checkout the repository
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Setup Go
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: false
+
+    # Install dependencies
+    - name: Install dependencies
+      run: |
+        go mod tidy
+        go mod download
+
+    # Run tests
+    - name: Run tests
+      run: go test -v ./...
+
+    # Build the application
+    - name: Build application
+      run: go build -v -o youllgetit_user_API ./...
+
+    # Deploy to remote server
+    - name: Deploy to remote server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+      run: |
+        # Prepare SSH
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+
+        # Transfer binary
+        scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa \
+          youllgetit_user_API \
+          $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
+
+        # Deploy on remote server
+        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+          # Ensure the binary is executable
+          chmod +x ~/youllgetit_user_API
+          
+          # Stop existing process if running
+          pkill -f youllgetit_user_API || true
+          
+          # Start the application in background
+          nohup ~/youllgetit_user_API > ~/youllgetit_user_API.log 2>&1 &
+          
+          # Verify process is running
+          sleep 2
+          ps aux | grep youllgetit_user_API
+        '
