@@ -9,28 +9,23 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Setup Go
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
           cache: false
 
-      # Install dependencies
       - name: Install dependencies
         run: |
           go mod tidy
           go mod download
 
-      # Build the application
       - name: Build application
         run: go build -o youllgetit_user_API .
 
-      # Prepare SSH Environment (your original approach)
       - name: Prepare SSH Environment
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
@@ -49,9 +44,8 @@ jobs:
           ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # Stop existing application with timeout to prevent hanging
       - name: Stop Existing Application
-        continue-on-error: true  # Don't fail if no process exists
+        continue-on-error: true
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
@@ -59,7 +53,6 @@ jobs:
           ssh -o ConnectTimeout=10 -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "pkill -f youllgetit_user_API || echo 'No existing process found'"
           sleep 5
 
-      # Transfer application binary with improved options
       - name: Transfer Application Binary
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -67,7 +60,6 @@ jobs:
         run: |
           scp -o ConnectTimeout=30 -i ~/.ssh/id_rsa youllgetit_user_API $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
 
-      # Create .env file if needed
       - name: Create .env file
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -78,7 +70,6 @@ jobs:
           $ENV_FILE_CONTENTS
           EOL"
 
-      # Start application with proper nohup configuration
       - name: Start Application
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -86,10 +77,10 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "chmod +x ~/youllgetit_user_API && \
           cd ~ && \
-          nohup ./youllgetit_user_API > ./youllgetit_user_API.log 2>&1 & \
-          sleep 5"
+          (nohup ./youllgetit_user_API > ./youllgetit_user_API.log 2>&1 &) && \
+          echo 'Application started in background' && \
+          exit"
 
-      # Verify application is running with proper timeouts
       - name: Verify Deployment
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
