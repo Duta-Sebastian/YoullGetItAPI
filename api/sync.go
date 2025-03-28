@@ -1,14 +1,16 @@
 package api
 
 import (
-	queries "YoullGetItAPI/database"
+	"YoullGetItAPI/database"
 	"YoullGetItAPI/middleware"
 	"YoullGetItAPI/models"
+	"YoullGetItAPI/util"
 	"encoding/json"
+	"fmt"
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
+	"log"
 	"net/http"
-	"time"
 )
 
 func RegisterSyncPullRoute(router *http.ServeMux) {
@@ -26,17 +28,11 @@ func RegisterSyncPullRoute(router *http.ServeMux) {
 				return
 			}
 
-			sinceParam := r.URL.Query().Get("since")
-			var sinceTime *time.Time = nil
-			if sinceParam != "" {
-				parsedTime, err := time.Parse(time.RFC3339, sinceParam)
+			tableParam := r.URL.Query().Get("table")
 
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					w.Write([]byte(`{"message":"Invalid 'since' timestamp format"}`))
-					return
-				}
-				sinceTime = &parsedTime
+			if !util.IsTableAllowed(tableParam) {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"message":"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv."}`))
 			}
 
 			db, dbConnectionErr := queries.GetDBConnection("app_user")
@@ -46,14 +42,26 @@ func RegisterSyncPullRoute(router *http.ServeMux) {
 				return
 			}
 
-			records, err := queries.GetSyncPullData(db, sinceTime, userId)
+			var records interface{}
+			var err error
+
+			switch tableParam {
+			case "job_cart":
+				//records, err = queries.GetJobCartSyncPullData(db, userId, sinceTime)
+			case "auth_user":
+				//records, err = queries.GetAuthUserSyncPullData(db, userId)
+			case "cv":
+				records, err = queries.GetCvSyncPullData(db, userId)
+			}
+
 			if err != nil {
+				log.Println(err)
 				w.WriteHeader(http.StatusServiceUnavailable)
 				w.Write([]byte(`{"message":"Database query failed."}`))
 				return
 			}
 
-			if len(records) == 0 {
+			if util.IsRecordEmpty(records) {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -77,11 +85,11 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 				return
 			}
 
-			var records []models.JobRecord
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&records); err != nil {
-				http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-				return
+			tableParam := r.URL.Query().Get("table")
+
+			if !util.IsTableAllowed(tableParam) {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"message":"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv."}`))
 			}
 
 			db, dbConnectionErr := queries.GetDBConnection("app_user")
@@ -91,14 +99,42 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 				return
 			}
 
-			err := queries.PostSyncPushData(db, records, userId)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"message":"Database query failed."}`))
-				return
+			var jobRecords []models.JobRecord
+			var userRecords []models.UsernameRecord
+			var cvRecords []models.CvRecord
+
+			switch tableParam {
+			case "job_cart":
+				{
+					decoder := json.NewDecoder(r.Body)
+					if err := decoder.Decode(&jobRecords); err != nil {
+						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+						return
+					}
+				}
+			case "auth_user":
+				{
+					decoder := json.NewDecoder(r.Body)
+					if err := decoder.Decode(&userRecords); err != nil {
+						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+						return
+					}
+				}
+			case "cv":
+				{
+					decoder := json.NewDecoder(r.Body)
+					if err := decoder.Decode(&cvRecords); err != nil {
+						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+						return
+					}
+					if err := queries.PostCvSyncPushData(db, userId, cvRecords); err != nil {
+						http.Error(w, "Error posting data to database", http.StatusBadRequest)
+						return
+					}
+				}
 			}
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"message":"Push successful."}`))
+			w.Write([]byte(fmt.Sprintf(`{"message":"%s push successful."}`, tableParam)))
 		})))
 }
