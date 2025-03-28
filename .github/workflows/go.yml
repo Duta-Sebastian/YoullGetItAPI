@@ -9,92 +9,97 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-    # Checkout the repository
-    - name: Checkout code
-      uses: actions/checkout@v4
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Setup Go
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        cache: false
+      # Setup Go
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: false
 
-    # Install dependencies
-    - name: Install dependencies
-      run: |
-        go mod tidy
-        go mod download
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          go mod tidy
+          go mod download
 
-    # Build the application
-    - name: Build application
-      run: go build -o youllgetit_user_API .
+      # Build the application
+      - name: Build application
+        run: go build -o youllgetit_user_API .
 
-    # Deploy to remote server
-    - name: Prepare SSH Environment
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
-        SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-      run: |
-        # Create SSH directory with secure permissions
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
-        
-        # Securely write SSH private key
-        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        
-        # Add server to known hosts
-        ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
-        chmod 644 ~/.ssh/known_hosts
-    
-    - name: Stop Existing Application
-      env:
-        SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-      run: |
-        ssh -vvv -i ~/.ssh/id_rsa \
-            -o StrictHostKeyChecking=no \
-            $SERVER_USER@$SERVER_HOST \
-            "pkill -f youllgetit_user_API || true && sleep 2 && (pgrep -f youllgetit_user_API || echo 'No existing process found')"
-    
-    - name: Transfer Application Binary
-      env:
-        SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-      run: |
-        scp -vvv \
-            -o StrictHostKeyChecking=no \
-            -i ~/.ssh/id_rsa \
-            youllgetit_user_API \
-            $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
-    
-    - name: Start Application
-      env:
-        SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-      run: |
-        ssh -v -o StrictHostKeyChecking=no \
-            $SERVER_USER@$SERVER_HOST \
-            "chmod +x ~/youllgetit_user_API && \
-            nohup ~/youllgetit_user_API > ~/youllgetit_user_API.log 2>&1 & \
-            sleep 2 && \
-            ps aux | grep youllgetit_user_API && \
-            tail -n 10 ~/youllgetit_user_API.log"
-    
-    - name: Verify Deployment
-      env:
-        SERVER_HOST: ${{ secrets.SERVER_HOST }}
-        SERVER_USER: ${{ secrets.SERVER_USER }}
-      run: |
-        ssh -v -o StrictHostKeyChecking=no \
-            $SERVER_USER@$SERVER_HOST \
-            "if pgrep -f youllgetit_user_API > /dev/null; then \
+      # Prepare SSH Environment (your original approach)
+      - name: Prepare SSH Environment
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          # Create SSH directory with secure permissions
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Securely write SSH private key
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add server to known hosts
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # Stop existing application with timeout to prevent hanging
+      - name: Stop Existing Application
+        continue-on-error: true  # Don't fail if no process exists
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -o ConnectTimeout=10 -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "pkill -f youllgetit_user_API || echo 'No existing process found'"
+          sleep 5
+
+      # Transfer application binary with improved options
+      - name: Transfer Application Binary
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          scp -o ConnectTimeout=30 -i ~/.ssh/id_rsa youllgetit_user_API $SERVER_USER@$SERVER_HOST:~/youllgetit_user_API
+
+      # Create .env file if needed
+      - name: Create .env file
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+        run: |
+          ssh -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "cat > ~/.env << 'EOL'
+          $ENV_FILE_CONTENTS
+          EOL"
+
+      # Start application with proper nohup configuration
+      - name: Start Application
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "chmod +x ~/youllgetit_user_API && \
+          cd ~ && \
+          nohup ./youllgetit_user_API > ./youllgetit_user_API.log 2>&1 & \
+          sleep 5"
+
+      # Verify application is running with proper timeouts
+      - name: Verify Deployment
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -o ConnectTimeout=10 -i ~/.ssh/id_rsa $SERVER_USER@$SERVER_HOST "if pgrep -f youllgetit_user_API > /dev/null; then \
             echo 'Application is running successfully'; \
             exit 0; \
-            else \
+          else \
             echo 'ERROR: Application failed to start'; \
-            cat ~/youllgetit_user_API.log; \
+            tail -n 50 ~/youllgetit_user_API.log; \
             exit 1; \
-            fi"
+          fi"

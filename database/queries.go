@@ -59,7 +59,7 @@ func CreateUser(db *sql.DB, userID string) error {
 
 func GetSyncPullData(db *sql.DB, sinceTime *time.Time, userId string) ([]models.JobRecord, error) {
 	rows, err := db.Query(`
-				SELECT job_data, date_added, status
+				SELECT job_id, job_data, date_added, status
 				FROM job_cart
 				WHERE date_added > COALESCE($1, '1970-01-01'::timestamp) AND user_id = $2`, &sinceTime, userId)
 
@@ -71,7 +71,7 @@ func GetSyncPullData(db *sql.DB, sinceTime *time.Time, userId string) ([]models.
 	var records []models.JobRecord
 	for rows.Next() {
 		var record models.JobRecord
-		if err := rows.Scan(&record.JobData, &record.DateAdded, &record.Status); err != nil {
+		if err := rows.Scan(&record.JobId, &record.JobData, &record.DateAdded, &record.Status); err != nil {
 			log.Println("Error getting sync data from database: ", err)
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func PostSyncPushData(db *sql.DB, records []models.JobRecord, userId string) err
 	query := fmt.Sprintf(`
 		INSERT INTO job_cart (user_id, job_data, date_added, status)
 		VALUES %s
-		ON CONFLICT (id) 
+		ON CONFLICT (user_id, job_id)
 		DO UPDATE SET job_data = EXCLUDED.job_data, date_added = EXCLUDED.date_added, status = EXCLUDED.status`,
 		strings.Join(valueStrings, ","),
 	)
