@@ -11,7 +11,7 @@ import (
 func GetCvSyncPullData(db *sql.DB, userId string) ([]models.CvRecord, error) {
 	rows, err := db.Query(`
 				SELECT cv_data, last_changed
-				FROM auth_user
+				FROM cv
 				WHERE user_id = $1`, userId)
 
 	if err != nil {
