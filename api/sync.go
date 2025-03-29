@@ -49,7 +49,7 @@ func RegisterSyncPullRoute(router *http.ServeMux) {
 			case "job_cart":
 				//records, err = queries.GetJobCartSyncPullData(db, userId, sinceTime)
 			case "auth_user":
-				//records, err = queries.GetAuthUserSyncPullData(db, userId)
+				records, err = queries.GetUserSyncPullData(db, userId)
 			case "cv":
 				records, err = queries.GetCvSyncPullData(db, userId)
 			}
@@ -100,7 +100,7 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 			}
 
 			var jobRecords []models.JobRecord
-			var userRecords []models.UsernameRecord
+			var userRecords []models.UserRecord
 			var cvRecords []models.CvRecord
 
 			switch tableParam {
@@ -119,6 +119,9 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 						return
 					}
+					if err := queries.PostUserSyncPushData(db, userId, userRecords); err != nil {
+						http.Error(w, "Error posting data to database", http.StatusBadRequest)
+					}
 				}
 			case "cv":
 				{
@@ -128,13 +131,11 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 						return
 					}
 					if err := queries.PostCvSyncPushData(db, userId, cvRecords); err != nil {
-						log.Println(err)
 						http.Error(w, "Error posting data to database", http.StatusBadRequest)
 						return
 					}
 				}
 			}
-
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(fmt.Sprintf(`{"message":"%s push successful."}`, tableParam)))
 		})))

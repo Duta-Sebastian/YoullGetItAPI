@@ -30,6 +30,28 @@ func GetCvSyncPullData(db *sql.DB, userId string) ([]models.CvRecord, error) {
 	return CvRecords, nil
 }
 
+func GetUserSyncPullData(db *sql.DB, userId string) ([]models.UserRecord, error) {
+	rows, err := db.Query(`
+				SELECT username, last_changed
+				FROM auth_user
+				WHERE auth0_id = $1`, userId)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var userRecords []models.UserRecord
+	for rows.Next() {
+		var userRecord models.UserRecord
+		if err := rows.Scan(&userRecord.Username, &userRecord.LastChanged); err != nil {
+			return nil, err
+		}
+		userRecords = append(userRecords, userRecord)
+	}
+
+	return userRecords, nil
+}
+
 func GetSyncPullData(db *sql.DB, sinceTime *time.Time, userId string) ([]models.JobRecord, error) {
 	rows, err := db.Query(`
 				SELECT job_id, job_data, date_added, status

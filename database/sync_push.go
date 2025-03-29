@@ -51,6 +51,44 @@ func PostCvSyncPushData(db *sql.DB, userId string, records []models.CvRecord) er
 	return nil
 }
 
+func PostUserSyncPushData(db *sql.DB, userId string, records []models.UserRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	record := records[0]
+
+	if record.LastChanged.IsZero() {
+		record.LastChanged = time.Now()
+	}
+
+	_, err = tx.Exec(`
+		UPDATE auth_user
+		SET username=$1, last_changed=$2
+		WHERE user_id=$3`,
+		record.Username, record.LastChanged, userId)
+
+	if err != nil {
+		return fmt.Errorf("failed to update user record: %v", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}
+
 func PostSyncPushData(db *sql.DB, records []models.JobRecord, userId string) error {
 	var valueStrings []string
 	var args []interface{}

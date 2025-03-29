@@ -8,7 +8,7 @@ func IsRecordEmpty(records interface{}) bool {
 		switch v := records.(type) {
 		case []models.JobRecord:
 			isEmpty = len(v) == 0
-		case []models.UsernameRecord:
+		case []models.UserRecord:
 			isEmpty = len(v) == 0
 		case []models.CvRecord:
 			isEmpty = len(v) == 0
