@@ -128,6 +128,7 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 						return
 					}
 					if err := queries.PostCvSyncPushData(db, userId, cvRecords); err != nil {
+						log.Println(err)
 						http.Error(w, "Error posting data to database", http.StatusBadRequest)
 						return
 					}
