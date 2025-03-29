@@ -24,7 +24,7 @@ func PostCvSyncPushData(db *sql.DB, userId string, records []models.CvRecord) er
 		}
 	}()
 
-	_, err = tx.Exec("DELETE FROM cv WHERE userid=$1", userId)
+	_, err = tx.Exec("DELETE FROM cv WHERE user_id=$1", userId)
 	if err != nil {
 		return fmt.Errorf("failed to delete cv records: %v", err)
 	}
