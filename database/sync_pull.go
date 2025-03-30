@@ -43,8 +43,14 @@ func GetUserSyncPullData(db *sql.DB, userId string) ([]models.UserRecord, error)
 	var userRecords []models.UserRecord
 	for rows.Next() {
 		var userRecord models.UserRecord
-		if err := rows.Scan(&userRecord.Username, &userRecord.LastChanged); err != nil {
+		var username sql.NullString
+		if err := rows.Scan(&username, &userRecord.LastChanged); err != nil {
 			return nil, err
+		}
+		if username.Valid {
+			userRecord.Username = username.String
+		} else {
+			userRecord.Username = ""
 		}
 		userRecords = append(userRecords, userRecord)
 	}

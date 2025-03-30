@@ -24,11 +24,6 @@ func PostCvSyncPushData(db *sql.DB, userId string, records []models.CvRecord) er
 		}
 	}()
 
-	_, err = tx.Exec("DELETE FROM cv WHERE user_id=$1", userId)
-	if err != nil {
-		return fmt.Errorf("failed to delete cv records: %v", err)
-	}
-
 	record := records[0]
 
 	if record.LastChanged.IsZero() {
@@ -36,9 +31,10 @@ func PostCvSyncPushData(db *sql.DB, userId string, records []models.CvRecord) er
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO CV (user_id, cv_data, last_changed)
-		VALUES ($1, $2, $3)`,
-		userId, record.CvData, record.LastChanged)
+		UPDATE CV
+		SET cv_data = $1, last_changed = $2
+		WHERE user_id = $3`,
+		record.CvData, record.LastChanged, userId)
 
 	if err != nil {
 		return fmt.Errorf("failed to insert CV record: %v", err)
