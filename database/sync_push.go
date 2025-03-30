@@ -71,7 +71,7 @@ func PostUserSyncPushData(db *sql.DB, userId string, records []models.UserRecord
 	_, err = tx.Exec(`
 		UPDATE auth_user
 		SET username=$1, last_changed=$2
-		WHERE user_id=$3`,
+		WHERE auth0_id=$3`,
 		record.Username, record.LastChanged, userId)
 
 	if err != nil {

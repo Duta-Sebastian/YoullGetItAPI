@@ -90,6 +90,7 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 			if !util.IsTableAllowed(tableParam) {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Write([]byte(`{"message":"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv."}`))
+				return
 			}
 
 			db, dbConnectionErr := queries.GetDBConnection("app_user")
@@ -121,6 +122,7 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 					}
 					if err := queries.PostUserSyncPushData(db, userId, userRecords); err != nil {
 						http.Error(w, "Error posting data to database", http.StatusBadRequest)
+						return
 					}
 				}
 			case "cv":
