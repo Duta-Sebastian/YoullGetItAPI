@@ -117,10 +117,12 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 				{
 					decoder := json.NewDecoder(r.Body)
 					if err := decoder.Decode(&userRecords); err != nil {
+						log.Println("Error decoding JSON:", err)
 						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 						return
 					}
 					if err := queries.PostUserSyncPushData(db, userId, userRecords); err != nil {
+						log.Println("Error decoding JSON:", err)
 						http.Error(w, "Error posting data to database", http.StatusBadRequest)
 						return
 					}
@@ -129,10 +131,12 @@ func RegisterSyncPushRoutes(router *http.ServeMux) {
 				{
 					decoder := json.NewDecoder(r.Body)
 					if err := decoder.Decode(&cvRecords); err != nil {
+						log.Println("Error decoding JSON:", err)
 						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 						return
 					}
 					if err := queries.PostCvSyncPushData(db, userId, cvRecords); err != nil {
+						log.Println("Error decoding JSON:", err)
 						http.Error(w, "Error posting data to database", http.StatusBadRequest)
 						return
 					}
