@@ -31,9 +31,12 @@ func PostCvSyncPushData(db *sql.DB, userId string, records []models.CvRecord) er
 	}
 
 	_, err = tx.Exec(`
-		UPDATE CV
-		SET cv_data = $1, last_changed = $2
-		WHERE user_id = $3`,
+    INSERT INTO CV (user_id, cv_data, last_changed)
+    VALUES ($3, $1, $2)
+    ON CONFLICT (user_id) 
+    DO UPDATE SET 
+        cv_data = $1,
+        last_changed = $2`,
 		record.CvData, record.LastChanged, userId)
 
 	if err != nil {
