@@ -99,8 +99,7 @@ func GetJobCartSyncPullData(ctx context.Context, db *sql.DB, userId string) ([]m
 	rows, err := db.QueryContext(ctx, `
 		SELECT job_id, job_data, last_changed, status, is_deleted
 		FROM job_cart
-		WHERE user_id = $2`,
-		userId)
+		WHERE user_id = $1`, userId)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %v", err)
 	}
