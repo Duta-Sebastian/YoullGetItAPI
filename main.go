@@ -2,6 +2,7 @@ package main
 
 import (
 	"YoullGetItAPI/api"
+	"YoullGetItAPI/database"
 	"YoullGetItAPI/middleware"
 	"github.com/joho/godotenv"
 	"log"
@@ -10,15 +11,21 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading the .env file: %v", err)
+		log.Printf("Error loading the .env file: %v\n", err)
 	}
+
+	dbConnections, err := database.SetupDatabases()
+	if err != nil {
+		log.Fatalf("Failed to set up database connections: %v", err)
+	}
+	defer dbConnections.CloseConnections()
 
 	router := http.NewServeMux()
 
 	api.RegisterPublicRoute(router)
-	api.RegisterCreateUserRoute(router)
-	api.RegisterSyncPushRoutes(router)
-	api.RegisterSyncPullRoute(router)
+	api.RegisterCreateUserRoute(router, dbConnections.AuthActionDB)
+	api.RegisterSyncPushRoutes(router, dbConnections.UserDB)
+	api.RegisterSyncPullRoute(router, dbConnections.UserDB)
 
 	handler := middleware.ChainMiddleware(router, middleware.LoggingMiddleware, middleware.ErrorHandlingMiddleware)
 

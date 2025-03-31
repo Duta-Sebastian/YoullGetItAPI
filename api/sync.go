@@ -5,144 +5,129 @@ import (
 	"YoullGetItAPI/middleware"
 	"YoullGetItAPI/models"
 	"YoullGetItAPI/util"
-	"encoding/json"
+	"context"
+	"database/sql"
 	"fmt"
-	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
-	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"log"
 	"net/http"
+	"time"
 )
 
-func RegisterSyncPullRoute(router *http.ServeMux) {
+// RegisterSyncPullRoute handles data sync pull requests
+func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 	router.Handle("/api/sync/pull", middleware.EnsureValidToken()(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-
-			token := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
-			claims := token.CustomClaims.(*middleware.CustomClaims)
+			claims := util.GetClaimsFromRequest(r)
 			userId := claims.UserId
 
 			if !claims.HasScope("sync:pull") {
-				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"message":"Insufficient scope."}`))
+				util.RespondWithError(w, http.StatusForbidden, "Insufficient scope.")
 				return
 			}
 
 			tableParam := r.URL.Query().Get("table")
-
 			if !util.IsTableAllowed(tableParam) {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(`{"message":"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv."}`))
-			}
-
-			db, dbConnectionErr := queries.GetDBConnection("app_user")
-			if dbConnectionErr != nil {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(`{"message":"Connection to database failed."}`))
+				util.RespondWithError(w, http.StatusBadRequest,
+					"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv.")
 				return
 			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
 
 			var records interface{}
 			var err error
 
 			switch tableParam {
 			case "job_cart":
-				//records, err = queries.GetJobCartSyncPullData(db, userId, sinceTime)
+				records, err = database.GetJobCartSyncPullData(ctx, db, userId)
 			case "auth_user":
-				records, err = queries.GetUserSyncPullData(db, userId)
+				records, err = database.GetUserSyncPullData(ctx, db, userId)
 			case "cv":
-				records, err = queries.GetCvSyncPullData(db, userId)
+				records, err = database.GetCvSyncPullData(ctx, db, userId)
 			}
 
 			if err != nil {
-				log.Println(err)
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(`{"message":"Database query failed."}`))
+				log.Printf("Database query failed for table %s: %v", tableParam, err)
+				util.RespondWithError(w, http.StatusServiceUnavailable, "Database query failed.")
 				return
 			}
 
 			if util.IsRecordEmpty(records) {
-				w.WriteHeader(http.StatusNoContent)
+				util.RespondWithJSON(w, http.StatusNoContent, "Record not found.")
 				return
 			}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(records)
+
+			util.RespondWithJSON(w, http.StatusOK, records)
 		})))
 }
 
-func RegisterSyncPushRoutes(router *http.ServeMux) {
+// RegisterSyncPushRoutes handles data sync push requests
+func RegisterSyncPushRoutes(router *http.ServeMux, db *sql.DB) {
 	router.Handle("/api/sync/push", middleware.EnsureValidToken()(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-
-			token := r.Context().Value(jwtmiddleware.ContextKey{}).(*validator.ValidatedClaims)
-			claims := token.CustomClaims.(*middleware.CustomClaims)
+			claims := util.GetClaimsFromRequest(r)
 			userId := claims.UserId
 
 			if !claims.HasScope("sync:push") {
-				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(`{"message":"Insufficient scope."}`))
+				util.RespondWithError(w, http.StatusForbidden, "Insufficient scope.")
 				return
 			}
 
 			tableParam := r.URL.Query().Get("table")
-
 			if !util.IsTableAllowed(tableParam) {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(`{"message":"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv."}`))
+				util.RespondWithError(w, http.StatusBadRequest,
+					"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv.")
 				return
 			}
 
-			db, dbConnectionErr := queries.GetDBConnection("app_user")
-			if dbConnectionErr != nil {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(`{"message":"Connection to database failed."}`))
-				return
-			}
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
 
-			var jobRecords []models.JobRecord
-			var userRecords []models.UserRecord
-			var cvRecords []models.CvRecord
+			var err error
 
 			switch tableParam {
 			case "job_cart":
-				{
-					decoder := json.NewDecoder(r.Body)
-					if err := decoder.Decode(&jobRecords); err != nil {
-						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-						return
-					}
+				var jobRecords []models.JobRecord
+				if err = util.DecodeRequestBody(r, &jobRecords); err != nil {
+					util.RespondWithError(w, http.StatusBadRequest, "Error decoding job cart JSON")
+					return
 				}
+
+				if err = database.PostJobCartSyncPushData(ctx, db, userId, jobRecords); err != nil {
+					util.RespondWithError(w, http.StatusServiceUnavailable, "Error posting job cart data")
+					return
+				}
+
 			case "auth_user":
-				{
-					decoder := json.NewDecoder(r.Body)
-					if err := decoder.Decode(&userRecords); err != nil {
-						log.Println("Error decoding JSON:", err)
-						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-						return
-					}
-					if err := queries.PostUserSyncPushData(db, userId, userRecords); err != nil {
-						log.Println("Error decoding JSON:", err)
-						http.Error(w, "Error posting data to database", http.StatusBadRequest)
-						return
-					}
+				var userRecords []models.UserRecord
+				if err = util.DecodeRequestBody(r, &userRecords); err != nil {
+					util.RespondWithError(w, http.StatusBadRequest, "Error decoding user JSON")
+					return
 				}
+
+				if err = database.PostUserSyncPushData(ctx, db, userId, userRecords); err != nil {
+					log.Printf("Error posting user data: %v", err)
+					util.RespondWithError(w, http.StatusInternalServerError, "Error posting user data")
+					return
+				}
+
 			case "cv":
-				{
-					decoder := json.NewDecoder(r.Body)
-					if err := decoder.Decode(&cvRecords); err != nil {
-						log.Println("Error decoding JSON:", err)
-						http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-						return
-					}
-					if err := queries.PostCvSyncPushData(db, userId, cvRecords); err != nil {
-						log.Println("Error decoding JSON:", err)
-						http.Error(w, "Error posting data to database", http.StatusBadRequest)
-						return
-					}
+				var cvRecords []models.CvRecord
+				if err = util.DecodeRequestBody(r, &cvRecords); err != nil {
+					util.RespondWithError(w, http.StatusBadRequest, "Error decoding cv JSON")
+					return
+				}
+
+				if err = database.PostCvSyncPushData(ctx, db, userId, cvRecords); err != nil {
+					log.Printf("Error posting CV data: %v", err)
+					util.RespondWithError(w, http.StatusInternalServerError, "Error posting cv data")
+					return
 				}
 			}
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(fmt.Sprintf(`{"message":"%s push successful."}`, tableParam)))
+
+			util.RespondWithJSON(w, http.StatusOK, map[string]string{
+				"message": fmt.Sprintf("%s push successful.", tableParam),
+			})
 		})))
 }
