@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	_ "github.com/lib/pq"
 	"log"
 	"os"
 	"time"
@@ -41,7 +42,6 @@ func configureConnectionPool(db *sql.DB) {
 	db.SetConnMaxLifetime(15 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
-	// Verify connection works
 	if err := db.Ping(); err != nil {
 		log.Printf("Warning: Error pinging database with user: %v", err)
 	}
