@@ -22,7 +22,7 @@ func main() {
 
 	router := http.NewServeMux()
 
-	api.RegisterPublicRoute(router)
+	api.RegisterHealthRoute(router)
 	api.RegisterCreateUserRoute(router, dbConnections.AuthActionDB)
 	api.RegisterSyncPushRoutes(router, dbConnections.UserDB)
 	api.RegisterSyncPullRoute(router, dbConnections.UserDB)
