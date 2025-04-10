@@ -1,7 +1,7 @@
 name: Deploy Go API
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
