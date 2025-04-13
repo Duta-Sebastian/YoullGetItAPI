@@ -54,7 +54,7 @@ func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 			}
 
 			if util.IsRecordEmpty(records) {
-				util.RespondWithJSON(w, http.StatusNoContent, "Record not found.")
+				util.RespondWithJSON(w, http.StatusNoContent, nil)
 				return
 			}
 
