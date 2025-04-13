@@ -31,6 +31,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PRIVATE_KEY_PASSPHRASE }}
           script: |
             # Update the image
             kubectl set image deployment/user-api -n apps user-api=${{ secrets.DOCKER_USERNAME }}/user-api:${{ github.sha }}
