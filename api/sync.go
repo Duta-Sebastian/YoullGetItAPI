@@ -21,14 +21,17 @@ func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 			userId := claims.UserId
 
 			if !claims.HasScope("sync:pull") {
-				util.RespondWithError(w, http.StatusForbidden, "Insufficient scope.")
+				errMsg := "Insufficient scope for sync:pull operation"
+				log.Printf("Access denied for user %s: %s", userId, errMsg)
+				util.RespondWithError(w, http.StatusForbidden, errMsg)
 				return
 			}
 
 			tableParam := r.URL.Query().Get("table")
 			if !util.IsTableAllowed(tableParam) {
-				util.RespondWithError(w, http.StatusBadRequest,
-					"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv.")
+				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart, auth_user, cv.", tableParam)
+				log.Printf("Invalid table request from user %s: %s", userId, errMsg)
+				util.RespondWithError(w, http.StatusBadRequest, errMsg)
 				return
 			}
 
@@ -48,16 +51,19 @@ func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 			}
 
 			if err != nil {
-				log.Printf("Database query failed for table %s: %v", tableParam, err)
-				util.RespondWithError(w, http.StatusServiceUnavailable, "Database query failed.")
+				errMsg := fmt.Sprintf("Database query failed for table %s: %v", tableParam, err)
+				log.Printf(errMsg)
+				util.RespondWithError(w, http.StatusServiceUnavailable, errMsg)
 				return
 			}
 
 			if util.IsRecordEmpty(records) {
+				log.Printf("No records found for user %s in table %s", userId, tableParam)
 				util.RespondWithJSON(w, http.StatusNoContent, nil)
 				return
 			}
 
+			log.Printf("Successfully pulled data from %s for user %s", tableParam, userId)
 			util.RespondWithJSON(w, http.StatusOK, records)
 		})))
 }
@@ -70,16 +76,21 @@ func RegisterSyncPushRoutes(router *http.ServeMux, db *sql.DB) {
 			userId := claims.UserId
 
 			if !claims.HasScope("sync:push") {
-				util.RespondWithError(w, http.StatusForbidden, "Insufficient scope.")
+				errMsg := "Insufficient scope for sync:push operation"
+				log.Printf("Access denied for user %s: %s", userId, errMsg)
+				util.RespondWithError(w, http.StatusForbidden, errMsg)
 				return
 			}
 
 			tableParam := r.URL.Query().Get("table")
 			if !util.IsTableAllowed(tableParam) {
-				util.RespondWithError(w, http.StatusBadRequest,
-					"Invalid 'table' parameter. Must be one of: job_cart, auth_user, cv.")
+				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart, auth_user, cv.", tableParam)
+				log.Printf("Invalid table request from user %s: %s", userId, errMsg)
+				util.RespondWithError(w, http.StatusBadRequest, errMsg)
 				return
 			}
+
+			log.Printf("Processing push request for table %s from user %s", tableParam, userId)
 
 			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 			defer cancel()
@@ -90,44 +101,71 @@ func RegisterSyncPushRoutes(router *http.ServeMux, db *sql.DB) {
 			case "job_cart":
 				var jobRecords []models.JobRecord
 				if err = util.DecodeRequestBody(r, &jobRecords); err != nil {
-					util.RespondWithError(w, http.StatusBadRequest, "Error decoding job cart JSON")
+					errMsg := fmt.Sprintf("Error decoding job cart JSON: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusBadRequest, errMsg)
 					return
 				}
 
+				log.Printf("Received %d job records for user %s", len(jobRecords), userId)
+				for i, job := range jobRecords {
+					log.Printf("Job Record #%d: %+v", i+1, job)
+				}
+
 				if err = database.PostJobCartSyncPushData(ctx, db, userId, jobRecords); err != nil {
-					util.RespondWithError(w, http.StatusServiceUnavailable, "Error posting job cart data")
+					errMsg := fmt.Sprintf("Error posting job cart data: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusServiceUnavailable, errMsg)
 					return
 				}
 
 			case "auth_user":
 				var userRecords []models.UserRecord
 				if err = util.DecodeRequestBody(r, &userRecords); err != nil {
-					util.RespondWithError(w, http.StatusBadRequest, "Error decoding user JSON")
+					errMsg := fmt.Sprintf("Error decoding user JSON: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusBadRequest, errMsg)
 					return
 				}
 
+				log.Printf("Received %d user records for user %s", len(userRecords), userId)
+				for i, user := range userRecords {
+					log.Printf("User Record #%d: %+v", i+1, user)
+				}
+
 				if err = database.PostUserSyncPushData(ctx, db, userId, userRecords); err != nil {
-					log.Printf("Error posting user data: %v", err)
-					util.RespondWithError(w, http.StatusInternalServerError, "Error posting user data")
+					errMsg := fmt.Sprintf("Error posting user data: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusInternalServerError, errMsg)
 					return
 				}
 
 			case "cv":
 				var cvRecords []models.CvRecord
 				if err = util.DecodeRequestBody(r, &cvRecords); err != nil {
-					util.RespondWithError(w, http.StatusBadRequest, "Error decoding cv JSON")
+					errMsg := fmt.Sprintf("Error decoding cv JSON: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusBadRequest, errMsg)
 					return
 				}
 
+				log.Printf("Received %d CV records for user %s", len(cvRecords), userId)
+				for i, cv := range cvRecords {
+					log.Printf("CV Record #%d: %+v", i+1, cv)
+				}
+
 				if err = database.PostCvSyncPushData(ctx, db, userId, cvRecords); err != nil {
-					log.Printf("Error posting CV data: %v", err)
-					util.RespondWithError(w, http.StatusInternalServerError, "Error posting cv data")
+					errMsg := fmt.Sprintf("Error posting CV data: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusInternalServerError, errMsg)
 					return
 				}
 			}
 
+			successMsg := fmt.Sprintf("%s push successful for user %s", tableParam, userId)
+			log.Printf(successMsg)
 			util.RespondWithJSON(w, http.StatusOK, map[string]string{
-				"message": fmt.Sprintf("%s push successful.", tableParam),
+				"message": successMsg,
 			})
 		})))
 }
