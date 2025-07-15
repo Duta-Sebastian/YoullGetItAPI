@@ -1,7 +1,7 @@
 package util
 
 func IsTableAllowed(table string) bool {
-	validTables := []string{"job_cart", "auth_user", "cv"}
+	validTables := []string{"job_cart", "auth_user", "cv", "question"}
 
 	isValidTable := false
 

@@ -181,3 +181,52 @@ func PostJobCartSyncPushData(ctx context.Context, db *sql.DB, userId string, rec
 
 	return nil
 }
+
+func PostQuestionSyncPushData(ctx context.Context, db *sql.DB, userId string, records []models.QuestionRecord) error {
+	if db == nil {
+		return errors.New("database connection is nil")
+	}
+
+	if len(records) == 0 {
+		return nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("Error rolling back transaction: %v", rbErr)
+			}
+		}
+	}()
+
+	record := records[0]
+
+	if record.LastChanged.IsZero() {
+		record.LastChanged = time.Now()
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO question (user_id, question_json, last_changed, is_short_questionnaire)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) 
+		DO UPDATE SET 
+			question_json = $2,
+			last_changed = $3,
+			is_short_questionnaire = $4`,
+		userId, record.QuestionJSON, record.LastChanged, record.IsShortQuestionnaire)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert question record: %v", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	return nil
+}

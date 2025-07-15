@@ -126,3 +126,38 @@ func GetJobCartSyncPullData(ctx context.Context, db *sql.DB, userId string) ([]m
 
 	return records, nil
 }
+
+func GetQuestionSyncPullData(ctx context.Context, db *sql.DB, userId string) ([]models.QuestionRecord, error) {
+	if db == nil {
+		return nil, errors.New("database connection is nil")
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT question_json, last_changed, is_short_questionnaire
+		FROM question
+		WHERE user_id = $1`, userId)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %v", err)
+	}
+	defer func(rows *sql.Rows) {
+		err = rows.Close()
+		if err != nil {
+			fmt.Printf("close rows failed: %v", err)
+		}
+	}(rows)
+
+	var questionRecords []models.QuestionRecord
+	for rows.Next() {
+		var questionRecord models.QuestionRecord
+		if err = rows.Scan(&questionRecord.QuestionJSON, &questionRecord.LastChanged, &questionRecord.IsShortQuestionnaire); err != nil {
+			return nil, fmt.Errorf("error scanning row: %v", err)
+		}
+		questionRecords = append(questionRecords, questionRecord)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %v", err)
+	}
+
+	return questionRecords, nil
+}

@@ -29,7 +29,8 @@ func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 
 			tableParam := r.URL.Query().Get("table")
 			if !util.IsTableAllowed(tableParam) {
-				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart, auth_user, cv.", tableParam)
+				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart,"+
+					" auth_user, cv, question.", tableParam)
 				log.Printf("Invalid table request from user %s: %s", userId, errMsg)
 				util.RespondWithError(w, http.StatusBadRequest, errMsg)
 				return
@@ -48,6 +49,8 @@ func RegisterSyncPullRoute(router *http.ServeMux, db *sql.DB) {
 				records, err = database.GetUserSyncPullData(ctx, db, userId)
 			case "cv":
 				records, err = database.GetCvSyncPullData(ctx, db, userId)
+			case "question":
+				records, err = database.GetQuestionSyncPullData(ctx, db, userId)
 			}
 
 			if err != nil {
@@ -84,7 +87,8 @@ func RegisterSyncPushRoutes(router *http.ServeMux, db *sql.DB) {
 
 			tableParam := r.URL.Query().Get("table")
 			if !util.IsTableAllowed(tableParam) {
-				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart, auth_user, cv.", tableParam)
+				errMsg := fmt.Sprintf("Invalid 'table' parameter: %s. Must be one of: job_cart,"+
+					" auth_user, cv, question.", tableParam)
 				log.Printf("Invalid table request from user %s: %s", userId, errMsg)
 				util.RespondWithError(w, http.StatusBadRequest, errMsg)
 				return
@@ -156,6 +160,27 @@ func RegisterSyncPushRoutes(router *http.ServeMux, db *sql.DB) {
 
 				if err = database.PostCvSyncPushData(ctx, db, userId, cvRecords); err != nil {
 					errMsg := fmt.Sprintf("Error posting CV data: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusInternalServerError, errMsg)
+					return
+				}
+
+			case "question":
+				var questionRecords []models.QuestionRecord
+				if err = util.DecodeRequestBody(r, &questionRecords); err != nil {
+					errMsg := fmt.Sprintf("Error decoding question JSON: %v", err)
+					log.Printf(errMsg)
+					util.RespondWithError(w, http.StatusBadRequest, errMsg)
+					return
+				}
+
+				log.Printf("Received %d question records for user %s", len(questionRecords), userId)
+				for i, question := range questionRecords {
+					log.Printf("Question Record #%d: %+v", i+1, question)
+				}
+
+				if err = database.PostQuestionSyncPushData(ctx, db, userId, questionRecords); err != nil {
+					errMsg := fmt.Sprintf("Error posting question data: %v", err)
 					log.Printf(errMsg)
 					util.RespondWithError(w, http.StatusInternalServerError, errMsg)
 					return
